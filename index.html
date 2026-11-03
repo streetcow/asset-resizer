@@ -248,6 +248,11 @@ body{min-width:1320px;padding:14px 20px 18px}
 .specfor{margin-left:auto;font-size:12px;font-weight:600;color:#fff;background:rgba(255,255,255,.18);border-radius:999px;padding:2px 10px;max-width:60%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 #presets.off{opacity:.55}
 button.off{opacity:.5}
+.cg{position:absolute;pointer-events:none;background:rgba(255,255,255,.55)}
+.cg.v{left:50%;top:0;bottom:0;width:1px}
+.cg.h{top:50%;left:0;right:0;height:1px}
+.cg.on{background:#7dffb0;box-shadow:0 0 0 1px rgba(0,0,0,.45)}
+.actions.top button{white-space:nowrap}
 .testbtn{margin-left:auto;background:rgba(255,255,255,.18);color:#fff;border:1px solid rgba(255,255,255,.55);padding:5px 14px;font-size:13px;font-weight:600}
 .testbtn:hover:not(:disabled){background:#fff;color:#2c5fb8;border-color:#fff}
 .testbar{display:flex;align-items:center;gap:6px 14px;flex-wrap:wrap;margin-top:10px;padding:8px 14px;border-radius:12px;background:rgba(255,196,64,.2);border:1px solid rgba(255,214,102,.7);color:#fff;font-size:12px}
@@ -2451,8 +2456,8 @@ function renderEditor(){
   box.innerHTML=`<h2><span class="num">▣</span>구역 지정<span class="hint" style="margin:0 0 0 auto">${done}/${total} 확인</span></h2>
     <div class="crop ${ok?'ok':''}" data-a="${a.id}" data-r="${r.k}" style="max-width:none">
       <h4><span>${esc(a.name)} · 비율 ${r.k}</span><span class="${ok?'ok':'warn'}">${ok?'확인됨':'확인 필요'}</span></h4>
-      <div class="actions top"><button class="${ok?'':'primary'}" data-ok="1">${ok?'확인 취소':'✓ 이 구역 확인'}</button><button data-reset="1">가운데로 되돌리기</button></div>
-      <div class="stagebox"><div class="stage"><img src="${a.preview}" alt=""><div class="box" style="${boxCss(a,b)}"><i class="nw" data-h="nw"></i><i class="ne" data-h="ne"></i><i class="sw" data-h="sw"></i><i class="se" data-h="se"></i></div></div></div>
+      <div class="actions top"><button class="${ok?'':'primary'}" data-ok="1">${ok?'확인 취소':'✓ 이 구역 확인'}</button><button data-reset="1">가운데로 되돌리기</button><button data-cx="1" title="박스를 좌우 가운데로 이동">↔ 가로 중앙</button><button data-cy="1" title="박스를 위아래 가운데로 이동">↕ 세로 중앙</button></div>
+      <div class="stagebox"><div class="stage"><img src="${a.preview}" alt=""><div class="cg v ${Math.abs(b.x+b.w/2-a.w/2)<1?'on':''}"></div><div class="cg h ${Math.abs(b.y+b.h/2-a.h/2)<1?'on':''}"></div><div class="box" style="${boxCss(a,b)}"><i class="nw" data-h="nw"></i><i class="ne" data-h="ne"></i><i class="sw" data-h="sw"></i><i class="se" data-h="se"></i></div></div></div>
       <div class="meta">적용 규격: ${r.list.map(p=>esc(p.media)+' '+p.w+'×'+p.h).join(' · ')}<br>잘라낼 영역 ${Math.round(b.w)}×${Math.round(b.h)}px${up.length?`<br><span class="warn">확대됨, 화질 저하 가능: ${up.map(p=>p.w+'×'+p.h).join(', ')}</span>`:''}</div>
     </div>`;
 }
@@ -2486,6 +2491,10 @@ $('#editor').addEventListener('click',e=>{
     }
     renderAssets()}
   if(e.target.dataset.reset){const r=ratiosOf(a).find(x=>x.k===k);a.boxes[k]=defBox(a,r);a.confirmed[k]=false;renderAssets()}
+  if(e.target.dataset.cx||e.target.dataset.cy){const b=a.boxes[k];
+    if(e.target.dataset.cx)b.x=(a.w-b.w)/2;
+    if(e.target.dataset.cy)b.y=(a.h-b.h)/2;
+    a.confirmed[k]=false;renderAssets()}
 });
 /* 박스 드래그·크기 조절 */
 let drag=null;
@@ -2500,7 +2509,12 @@ $('#editor').addEventListener('pointermove',e=>{
   if(!drag)return;
   const d=drag,a=d.a,o=d.orig;let b;
   const dx=(e.clientX-d.sx)*d.scale,dy=(e.clientY-d.sy)*d.scale;
-  if(!d.h){b={...o,x:Math.min(Math.max(0,o.x+dx),a.w-o.w),y:Math.min(Math.max(0,o.y+dy),a.h-o.h)}}
+  if(!d.h){
+    b={...o,x:Math.min(Math.max(0,o.x+dx),a.w-o.w),y:Math.min(Math.max(0,o.y+dy),a.h-o.h)};
+    const thr=8*d.scale;   // 화면 기준 8px 안쪽이면 가운데로 달라붙음
+    if(Math.abs(b.x+b.w/2-a.w/2)<thr)b.x=(a.w-b.w)/2;
+    if(Math.abs(b.y+b.h/2-a.h/2)<thr)b.y=(a.h-b.h)/2;
+  }
   else{
     const east=d.h.includes('e'),south=d.h.includes('s');
     const ox=east?o.x:o.x+o.w,oy=south?o.y:o.y+o.h;
@@ -2512,6 +2526,9 @@ $('#editor').addEventListener('pointermove',e=>{
   }
   a.boxes[d.k]=b;
   d.bx.style.cssText=boxCss(a,b);
+  const gv=d.bx.parentElement.querySelector('.cg.v'),gh=d.bx.parentElement.querySelector('.cg.h');
+  if(gv)gv.classList.toggle('on',Math.abs(b.x+b.w/2-a.w/2)<1);
+  if(gh)gh.classList.toggle('on',Math.abs(b.y+b.h/2-a.h/2)<1);
   d.moved=true;
 });
 window.addEventListener('pointerup',()=>{
