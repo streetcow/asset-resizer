@@ -305,7 +305,8 @@ button.off{opacity:.5}
       <div class="pf-b">
         <button class="primary small" type="submit" id="pSubmit">프리셋 추가</button>
         <button class="small" type="button" id="pCancel" style="display:none">취소</button>
-        <button class="small danger" type="button" id="pClear" style="margin-left:auto">전체 비우기</button>
+        <button class="small" type="button" id="pRestore" style="margin-left:auto" title="빠진 기본 규격만 다시 채웁니다(직접 추가·수정한 규격은 그대로)">기본 규격 복원</button>
+        <button class="small danger" type="button" id="pClear">전체 비우기</button>
       </div>
     </form>
     <div class="err" id="presetErr"></div>
@@ -313,7 +314,7 @@ button.off{opacity:.5}
    <section class="glass specs" id="pane2">
     <h2><span class="num">3</span>타겟 매체·규격 선택<span class="specfor" id="specFor"></span></h2>
     <div id="presets"></div>
-    <div class="hint">아래 소재 목록에서 소재를 고르면, 이 소재에 적용할 규격만 체크됩니다. ✎ 수정과 ✕ 삭제는 항목에 마우스를 올리면 나타나며, 수정은 가운데 카드의 프리셋 입력란에서 합니다.</div>
+    <div class="hint">아래 소재 목록에서 소재를 고르면, 이 소재에 적용할 규격만 체크됩니다. ✎ 수정과 ✕ 삭제는 항목에 마우스를 올리면 나타나며, 수정은 가운데 카드의 프리셋 입력란에서 합니다. <b>✕는 이번 접속에서만 숨기며, 새로고침하면 다시 나타납니다.</b></div>
    </section>
   </div>
  </header>
@@ -2261,7 +2262,7 @@ const DEFAULTS=[
  ['X','가로',1200,675],['X','정사각',1080,1080],['틱톡','풀스크린',1080,1920]];
 let uid=1;
 const defPresets=()=>DEFAULTS.map(d=>({id:uid++,media:d[0],label:d[1],w:d[2],h:d[3]}));
-const S={presets:[],campaign:'',version:'',selected:new Set(),assets:[],editing:null,results:{},running:false,stop:false,testMode:false,real:null};
+const S={presets:[],campaign:'',version:'',selected:new Set(),assets:[],editing:null,results:{},running:false,stop:false,testMode:false,real:null,hidden:new Set()};   // hidden: ✕로 이번 접속에서만 숨긴 프리셋 id(저장하지 않음)
 
 /* ---------- 저장 ---------- */
 function load(){
@@ -2314,9 +2315,9 @@ $('#version').addEventListener('input',e=>{
 
 /* ---------- 2단계 ---------- */
 function renderPresets(){
-  const by={};S.presets.forEach(p=>(by[p.media]=by[p.media]||[]).push(p));
+  const by={};S.presets.filter(p=>!S.hidden.has(p.id)).forEach(p=>(by[p.media]=by[p.media]||[]).push(p));
   const box=$('#presets');
-  if(!S.presets.length){box.innerHTML='<div class="hint">프리셋이 없습니다. 아래에서 추가하세요.</div>';return}
+  if(!Object.keys(by).length){box.innerHTML='<div class="hint">표시할 규격이 없습니다. 새로고침하면 숨긴 규격이 다시 나타나고, 아래에서 새 규격을 추가할 수도 있습니다.</div>';return}
   const ca=curAsset();
   const sf=$('#specFor');if(sf)sf.textContent=ca?ca.file.name:'소재를 선택하세요';
   box.classList.toggle('off',!ca);
@@ -2327,7 +2328,10 @@ function renderPresets(){
 $('#presets').addEventListener('click',e=>{
   const ed=e.target.dataset.edit,dl=e.target.dataset.del;
   if(ed){const p=S.presets.find(x=>x.id==ed);S.editing=p.id;$('#pMedia').value=p.media;$('#pLabel').value=p.label;$('#pW').value=p.w;$('#pH').value=p.h;$('#pSubmit').textContent='수정 저장';$('#pCancel').style.display=''}
-  if(dl){S.presets=S.presets.filter(x=>x.id!=dl);S.assets.forEach(a=>a.sel.delete(+dl));save();renderPresets();renderAssets();renderName()}
+  if(dl){   // 이번 접속에서만 숨김: 저장된 프리셋 목록은 바꾸지 않으므로 새로고침하면 다시 나타남
+    S.hidden.add(+dl);S.assets.forEach(a=>a.sel.delete(+dl));
+    if(S.editing===+dl)resetForm();
+    renderPresets();renderAssets();renderName()}
 });
 $('#presets').addEventListener('change',e=>{
   const id=e.target.dataset.sel,ca=curAsset();if(!id||!ca)return;
@@ -2336,13 +2340,24 @@ $('#presets').addEventListener('change',e=>{
 });
 function resetForm(){S.editing=null;$('#presetForm').reset();$('#pSubmit').textContent='프리셋 추가';$('#pCancel').style.display='none'}
 $('#pCancel').onclick=()=>{resetForm();$('#presetErr').textContent=''};
+/* 기본 규격 복원: 매체명+해상도가 목록에 없는 기본 규격만 다시 추가(직접 추가·수정한 규격은 건드리지 않음) */
+$('#pRestore').onclick=()=>{
+  S.hidden.clear();
+  let n=0;
+  DEFAULTS.forEach(([media,label,w,h])=>{
+    if(!S.presets.some(p=>p.media===media&&p.w===w&&p.h===h)){S.presets.push({id:uid++,media,label,w,h});n++}
+  });
+  save();renderPresets();renderAssets();renderName();
+  $('#presetErr').textContent='';
+  alert(n?`빠져 있던 기본 규격 ${n}개를 복원했습니다. 직접 추가·수정한 규격은 그대로 두었습니다.`:'빠진 기본 규격이 없습니다. (✕로 숨긴 규격이 있었다면 다시 표시했습니다)');
+};
 $('#presetForm').addEventListener('submit',e=>{
   e.preventDefault();
   const media=clean($('#pMedia').value),label=$('#pLabel').value.trim().replace(/[\\\/:*?"<>|_]/g,''),w=+$('#pW').value,h=+$('#pH').value;
   const err=$('#presetErr');
   if(!media||!label){err.textContent='매체명과 규격 이름을 입력하세요. (_ 와 특수문자는 쓸 수 없습니다)';return}
   if(!Number.isInteger(w)||!Number.isInteger(h)||w<1||h<1||w>8192||h>8192){err.textContent='가로·세로는 1~8192 사이의 정수여야 합니다.';return}
-  if(S.presets.some(p=>p.id!==S.editing&&p.media===media&&p.w===w&&p.h===h)){err.textContent='같은 매체명·해상도의 프리셋이 이미 있습니다.';return}
+  if(S.presets.some(p=>p.id!==S.editing&&p.media===media&&p.w===w&&p.h===h)){err.textContent='같은 매체명·해상도의 프리셋이 이미 있습니다(✕로 숨긴 규격도 포함, 새로고침하면 다시 나타납니다).';return}
   err.textContent='';
   if(S.editing){Object.assign(S.presets.find(p=>p.id===S.editing),{media,label,w,h})}
   else S.presets.push({id:uid++,media,label,w,h});
@@ -2351,7 +2366,7 @@ $('#presetForm').addEventListener('submit',e=>{
 $('#pClear').onclick=()=>{
   if(!confirm('저장된 프리셋과 캠페인명·버전을 모두 지우고 처음 상태(기본 프리셋 10개)로 되돌릴까요?'))return;
   try{localStorage.removeItem(STORE)}catch(e){}
-  S.presets=defPresets();S.campaign='';S.version='1';S.assets.forEach(a=>a.sel.clear());
+  S.presets=defPresets();S.hidden.clear();S.campaign='';S.version='1';S.assets.forEach(a=>a.sel.clear());
   if(S.testMode)S.real={campaign:'',version:'1'};
   $('#campaign').value='';$('#version').value='1';$('#nameErr').textContent='';resetForm();
   renderPresets();renderAssets();renderName();
@@ -2405,7 +2420,7 @@ function loadAsset(a){
     }
   });
 }
-function presetsOf(a){return S.presets.filter(p=>a.sel&&a.sel.has(p.id))}
+function presetsOf(a){return S.presets.filter(p=>!S.hidden.has(p.id)&&a.sel&&a.sel.has(p.id))}
 function ratiosOf(a){const m={};presetsOf(a).forEach(p=>{const k=ratioKey(p.w,p.h);(m[k]=m[k]||{k,w:p.w,h:p.h,list:[]}).list.push(p)});return Object.values(m)}
 function curAsset(){return S.assets.find(x=>x.id===S.cur&&!x.loading&&!x.error)||null}
 function pickAsset(id,k){S.cur=id;S.sel=k?{a:id,k}:null;renderAssets()}
@@ -2771,7 +2786,7 @@ $('#testBtn').onclick=async()=>{
     files.forEach(f=>{f.__test=true});
     await addFiles(files);
     S.assets.filter(a=>a.test).forEach(a=>{
-      (want[a.file.name]||[]).forEach(([w,h])=>{const p=S.presets.find(q=>q.w===w&&q.h===h);if(p)a.sel.add(p.id)});
+      (want[a.file.name]||[]).forEach(([w,h])=>{const p=S.presets.find(q=>q.w===w&&q.h===h&&!S.hidden.has(q.id));if(p)a.sel.add(p.id)});
     });
     const first=S.assets.find(a=>a.test&&!a.error&&a.sel.size);
     if(first){S.cur=first.id;S.sel=null}
