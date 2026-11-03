@@ -2575,7 +2575,8 @@ function gateInfo(){
 function updateGate(){
   const m=gateInfo();
   $('#run').disabled=S.running;$('#run').classList.toggle('off',m.length>0);
-  $('#gate').innerHTML=m.length?'<span class="warn">'+m.map(esc).join('<br>')+'</span>':'<span class="ok">모든 조건이 충족되었습니다. 일괄 변환을 실행할 수 있습니다.</span>';
+  // 부족한 조건 문구는 화면에 항상 띄우지 않고, 일괄 변환을 눌렀을 때 안내창으로만 알려준다
+  $('#gate').innerHTML=m.length?'':'<span class="ok">모든 조건이 충족되었습니다. 일괄 변환을 실행할 수 있습니다.</span>';
   const has=Object.values(S.results).some(r=>r.length);
   $('#zipAll').disabled=S.running;$('#zipAll').classList.toggle('off',!has);
   $('#stop').disabled=!S.running;
